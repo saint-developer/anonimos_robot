@@ -1,5 +1,6 @@
 const { InlineKeyboard } = require('grammy');
 const db = require('../database/db');
+const { OWNER_ID } = require('../config');
 
 module.exports = (bot) => {
     bot.on('inline_query', async (ctx) => {
@@ -37,16 +38,18 @@ module.exports = (bot) => {
             ]);
         }
 
-        // ثبت پیام در دیتابیس برای پاسخ‌دهی
+        // ثبت پیام در دیتابیس
         const now = new Date().toISOString();
         const msgRecord = db.prepare('INSERT INTO messages (sender_id, text, created_at, status) VALUES (?, ?, ?, ?)')
             .run(userId, query, now, 'inline_sent');
         
         const msgId = msgRecord.lastInsertRowid;
 
-        // دکمه‌های شیشه‌ای
+        // ساخت کیبورد شیشه‌ای
         const keyboard = new InlineKeyboard()
-            .text('✍️ پاسخ ناشناس', `reply_inline_${msgId}_${userId}`);
+            .text('✍️ پاسخ ناشناس', `reply_inline_${msgId}_${userId}`)
+            .row()
+            .text('🚫 گزارش تخلف', `report_inline_${msgId}`);
 
         // نتیجه اینلاین
         const results = [
@@ -66,24 +69,32 @@ module.exports = (bot) => {
         await ctx.answerInlineQuery(results, { cache_time: 0 });
     });
 
-    // هندلر دکمه پاسخ به پیام اینلاین
+    // هندلر دکمه پاسخ ناشناس
     bot.callbackQuery(/^reply_inline_(\d+)_(\d+)$/, async (ctx) => {
         const msgId = ctx.match[1];
         const receiverId = ctx.match[2];
         
+        // جلوگیری از پاسخ به خود
         if (ctx.from.id === parseInt(receiverId)) {
             return ctx.answerCallbackQuery('❌ شما نمی‌توانید به پیام خودتان پاسخ دهید.', { show_alert: true });
         }
 
-        await ctx.answerCallbackQuery('✍️ حالا پاسخ خود را در چت بنویسید.');
-        
+        // ثبت وضعیت کاربر در دیتابیس
         ctx.session.replyingToInlineMsg = msgId;
         ctx.session.replyingToUserId = receiverId;
-        
-        await ctx.reply(`✍️ پاسخ خود را برای این پیام بنویسید:`);
+
+        await ctx.answerCallbackQuery('✍️ حالا پاسخ خود را بنویسید.');
+        await ctx.reply(`✍️ لطفاً پاسخ خود را برای این پیام بنویسید:`);
     });
 
-    // هندلر دریافت متن پاسخ برای اینلاین
+    // هندلر دکمه گزارش تخلف
+    bot.callbackQuery(/^report_inline_(\d+)$/, async (ctx) => {
+        const msgId = ctx.match[1];
+        await ctx.answerCallbackQuery('✅ گزارش شما ثبت شد. با تشکر از همکاری شما.', { show_alert: true });
+        await ctx.api.sendMessage(OWNER_ID, `🚫 <b>گزارش تخلف جدید برای پیام #${msgId}</b>`, { parse_mode: 'HTML' });
+    });
+
+    // هندلر دریافت متن پاسخ
     bot.on('message:text', async (ctx, next) => {
         if (!ctx.session.replyingToInlineMsg) return next();
         
@@ -96,7 +107,7 @@ module.exports = (bot) => {
             db.prepare('UPDATE messages SET reply_text = ?, status = ? WHERE id = ?').run(replyText, 'replied', msgId);
             await ctx.reply('✅ پاسخ شما ارسال شد.');
         } catch (e) {
-            await ctx.reply('❌ خطا در ارسال پاسخ.');
+            await ctx.reply('❌ خطا در ارسال پاسخ. شاید کاربر ربات را بلاک کرده باشد.');
         }
 
         ctx.session.replyingToInlineMsg = null;
