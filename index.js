@@ -21,7 +21,21 @@ if (!BOT_TOKEN || !OWNER_ID) {
 
 const bot = new Bot(BOT_TOKEN);
 
-// ================== دستور استارت ==================
+// ================== دستور استارت (مخصوص لینک ناشناس) ==================
+// این هندلر باید حتماً قبل از هندلر استارت عادی باشه
+bot.command('start', async (ctx, next) => {
+    const payload = ctx.match;
+    if (payload === 'anon') {
+        // ارسال پیام برای کاربری که با لینک اومده (بدون کیبورد)
+        await ctx.reply('👋 به ربات پیام ناشناس خوش آمدی!\n\nبرای ارسال پیام، کافیه همین الان هر متنی که میخوای رو بفرستی.', { 
+            reply_markup: { remove_keyboard: true } 
+        });
+        return;
+    }
+    return next(); // اگر payload 'anon' نبود، برو سراغ هندلر بعدی
+});
+
+// ================== دستور استارت عادی ==================
 bot.command('start', async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username || '';
@@ -56,10 +70,10 @@ bot.hears('🔙 بازگشت', async (ctx) => {
 });
 
 // ================== لود کردن هندلرها ==================
-// نکته: این‌ها باید دقیقاً اینجا باشن (بعد از تعریف bot)
+// نکته مهم: این‌ها باید دقیقاً اینجا باشن (بعد از تعریف bot)
 userHandlers(bot);
 adminHandlers(bot);
-anonymousHandlers(bot); // 👈 این خط رو از بالا آوردیم پایین
+anonymousHandlers(bot);
 
 // ================== وب‌سرور Render ==================
 const PORT = process.env.PORT || 3000;

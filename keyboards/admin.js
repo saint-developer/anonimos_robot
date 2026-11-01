@@ -1,4 +1,3 @@
-// منوی اصلی ادمین
 function getAdminMenu() {
     return [
         ['👥 کاربران', '📢 پیام همگانی'],
@@ -8,7 +7,6 @@ function getAdminMenu() {
     ];
 }
 
-// زیرمنوی کاربران
 function getUsersSubmenu() {
     return [
         ['👥 همه کاربران', '🚫 کاربران مسدود'],
@@ -17,7 +15,6 @@ function getUsersSubmenu() {
     ];
 }
 
-// زیرمنوی تنظیمات
 function getSettingsMenu() {
     return [
         ['📝 تنظیم متن استارت', '🔗 تنظیم کانال جوین اجباری'],
