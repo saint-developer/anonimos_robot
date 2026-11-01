@@ -7,14 +7,22 @@ if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
 }
 
-const db = new Database(path.join(dbDir, 'bot.db'));
+const dbPath = path.join(dbDir, 'bot.db');
+
+// 🚨 در فاز توسعه، دیتابیس رو هر بار پاک میکنیم تا ساختار جدید ساخته بشه
+// 🚨 در فاز نهایی (وقتی کاربر واقعی داشتیم) این خط رو کامنت کن
+if (fs.existsSync(dbPath)) {
+    fs.unlinkSync(dbPath); 
+}
+
+const db = new Database(dbPath);
 
 function initDb() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER UNIQUE NOT NULL,
-            user_code INTEGER UNIQUE, /* کد اختصاصی کاربر */
+            user_code INTEGER UNIQUE,
             username TEXT,
             full_name TEXT NOT NULL,
             join_date TEXT NOT NULL,
@@ -22,7 +30,7 @@ function initDb() {
             warnings INTEGER DEFAULT 0,
             is_verified INTEGER DEFAULT 0,
             phone_number TEXT,
-            score INTEGER DEFAULT 0, /* سکه */
+            score INTEGER DEFAULT 0,
             invite_count INTEGER DEFAULT 0
         );
 
@@ -80,7 +88,8 @@ function initDb() {
         'force_join': '0',
         'force_channel': '',
         'transfer_min': '20',
-        'transfer_fee': '2'
+        'transfer_fee': '2',
+        'shop_enabled': '1'
     };
     
     const stmt = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
@@ -88,14 +97,20 @@ function initDb() {
         stmt.run(key, value);
     }
 
-    // اختصاص کد به کاربرانی که کد ندارن
+    // اختصاص کد به کاربران (اگه جدید ثبت‌نام کرده باشن)
     const usersWithoutCode = db.prepare('SELECT id FROM users WHERE user_code IS NULL').all();
     const updateCodeStmt = db.prepare('UPDATE users SET user_code = ? WHERE id = ?');
     usersWithoutCode.forEach(u => {
-        updateCodeStmt.run(Math.floor(Math.random() * 90000) + 10000, u.id); // کد 5 رقمی
+        updateCodeStmt.run(Math.floor(Math.random() * 90000) + 10000, u.id);
     });
+    
+    // اضافه کردن محصول تستی
+    const shopCount = db.prepare('SELECT COUNT(*) as count FROM shop_items').get().count;
+    if (shopCount === 0) {
+        db.prepare('INSERT INTO shop_items (name, description, price, emoji) VALUES (?, ?, ?, ?)').run('تگ ویژه', 'یک تگ خاص کنار اسم شما', 100, '👑');
+    }
 
-    console.log('✅ Database initialized');
+    console.log('✅ Database initialized (Fresh)');
 }
 
 initDb();
