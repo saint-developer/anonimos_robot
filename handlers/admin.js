@@ -4,16 +4,16 @@ const { OWNER_ID } = require('../config');
 const { getAdminMenu, getUsersSubmenu, getSettingsMenu, getAdminsMenu } = require('../keyboards/admin');
 
 module.exports = (bot) => {
-    // 1. پنل مدیریت
+    // ================== منوهای اصلی ==================
     bot.hears('👑 پنل مدیریت', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
+        ctx.session.adminState = null; // ریست استیت
         await ctx.reply('👑 <b>پنل مدیریت</b>\n\nخوش آمدید.', {
             parse_mode: 'HTML',
             reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true }
         });
     });
 
-    // 2. کاربران
     bot.hears('👥 کاربران', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         const total = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
@@ -22,21 +22,34 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML', reply_markup: { keyboard: getUsersSubmenu(), resize_keyboard: true } });
     });
 
-    // 3. مدیریت سکه کاربران
+    bot.hears('👤 ادمین‌ها', async (ctx) => {
+        if (ctx.from.id !== OWNER_ID) return;
+        ctx.session.adminState = null;
+        await ctx.reply('👤 <b>مدیریت ادمین‌ها</b>\n\n', { parse_mode: 'HTML', reply_markup: { keyboard: getAdminsMenu(), resize_keyboard: true } });
+    });
+
+    bot.hears('⚙️ تنظیمات', async (ctx) => {
+        if (ctx.from.id !== OWNER_ID) return;
+        ctx.session.adminState = null;
+        await ctx.reply('⚙️ <b>تنظیمات ربات</b>', { parse_mode: 'HTML', reply_markup: { keyboard: getSettingsMenu(), resize_keyboard: true } });
+    });
+
+    // ================== دکمه‌های عملیاتی ==================
+
+    // 1. شروع مدیریت سکه
     bot.hears('💰 مدیریت سکه کاربران', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        await ctx.session.adminState = 'waiting_for_coin_user';
-        await ctx.reply('💰 <b>مدیریت سکه</b>\n\nلطفاً آیدی عددی کاربر را وارد کنید:', { parse_mode: 'HTML' });
+        ctx.session.adminState = 'waiting_for_coin_user';
+        await ctx.reply('💰 <b>مدیریت سکه</b>\n\nلطفاً آیدی عددی کاربر را وارد کنید (یا برای انصراف /start بزنید):', { parse_mode: 'HTML' });
     });
 
-    // 4. مدیریت کد هدیه
+    // 2. شروع مدیریت کد هدیه
     bot.hears('🎁 مدیریت کد هدیه', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        await ctx.session.adminState = 'waiting_for_gift_code';
-        await ctx.reply('🎁 <b>مدیریت کد هدیه</b>\n\nلطفاً کد هدیه (مثلاً WELCOME2025) را ارسال کنید:', { parse_mode: 'HTML' });
+        await ctx.reply('🎁 <b>مدیریت کد هدیه</b>\n\nاین بخش به زودی اضافه می‌شود.', { parse_mode: 'HTML' });
     });
 
-    // 5. آمار ربات
+    // 3. آمار ربات
     bot.hears('📊 آمار ربات', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         const totalUsers = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
@@ -55,15 +68,36 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
-    // 6. ادمین‌ها
-    bot.hears('👤 ادمین‌ها', async (ctx) => {
+    // 4. خاموش/روشن
+    bot.hears('🔕 خاموش/روشن', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        await ctx.reply('👤 <b>مدیریت ادمین‌ها</b>\n\n', { parse_mode: 'HTML', reply_markup: { keyboard: getAdminsMenu(), resize_keyboard: true } });
+        const current = db.prepare('SELECT value FROM settings WHERE key = ?').get('bot_enabled')?.value;
+        const newStatus = current === '1' ? '0' : '1';
+        db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(newStatus, 'bot_enabled');
+        await ctx.reply(`✅ وضعیت ربات به <b>${newStatus === '1' ? 'روشن' : 'خاموش'}</b> تغییر یافت.`, {
+            parse_mode: 'HTML',
+            reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true }
+        });
     });
 
+    // 5. پیام‌های دریافتی
+    bot.hears('📩 پیام‌های دریافتی', async (ctx) => {
+        if (ctx.from.id !== OWNER_ID) return;
+        const messages = db.prepare('SELECT * FROM messages ORDER BY id DESC LIMIT 10').all();
+        if (messages.length === 0) return ctx.reply('📭 هیچ پیامی وجود ندارد.');
+        for (const msg of messages) {
+            const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(msg.sender_id);
+            const userName = user ? `کاربر #${user.user_code}` : 'ناشناس';
+            const date = new Date(msg.created_at).toLocaleDateString('fa-IR');
+            await ctx.reply(`📩 <b>پیام از:</b> ${userName}\n📅 <b>تاریخ:</b> ${date}\n\n💬 <b>متن:</b>\n${msg.text}\n\nوضعیت: ${msg.status === 'replied' ? '✅ پاسخ داده شده' : '⏳ در انتظار پاسخ'}`, { parse_mode: 'HTML' });
+        }
+    });
+
+    // ================== مدیریت ادمین‌ها ==================
+    
     bot.hears('➕ افزودن ادمین', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        await ctx.session.adminState = 'waiting_for_admin_id';
+        ctx.session.adminState = 'waiting_for_admin_id';
         await ctx.reply('➕ لطفاً آیدی عددی کاربر را برای ادمین شدن ارسال کنید:');
     });
 
@@ -78,62 +112,45 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
-    // 7. تنظیمات
-    bot.hears('⚙️ تنظیمات', async (ctx) => {
+    bot.hears('🗑️ حذف ادمین', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        await ctx.reply('⚙️ <b>تنظیمات ربات</b>', { parse_mode: 'HTML', reply_markup: { keyboard: getSettingsMenu(), resize_keyboard: true } });
+        ctx.session.adminState = 'waiting_for_remove_admin_id';
+        await ctx.reply('🗑️ لطفاً آیدی عددی ادمینی که می‌خواهید حذف کنید را ارسال کنید:');
     });
 
-    // 8. خاموش/روشن
-    bot.hears('🔕 خاموش/روشن', async (ctx) => {
+    // ================== زیرمنوها ==================
+    bot.hears('👥 همه کاربران', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
-        const current = db.prepare('SELECT value FROM settings WHERE key = ?').get('bot_enabled')?.value;
-        const newStatus = current === '1' ? '0' : '1';
-        db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(newStatus, 'bot_enabled');
-        await ctx.reply(`✅ وضعیت ربات به <b>${newStatus === '1' ? 'روشن' : 'خاموش'}</b> تغییر یافت.`, {
-            parse_mode: 'HTML',
-            reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true }
+        const users = db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT 20').all();
+        let text = '👥 <b>لیست ۲۰ کاربر آخر:</b>\n\n';
+        users.forEach((u, i) => {
+            text += `${i+1}. ${u.full_name} | کد: ${u.user_code} | <code>${u.telegram_id}</code> | ${u.is_banned ? '🚫' : '✅'}\n`;
         });
+        await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
-    // 9. پیام‌های دریافتی
-    bot.hears('📩 پیام‌های دریافتی', async (ctx) => {
-        if (ctx.from.id !== OWNER_ID) return;
-        const messages = db.prepare('SELECT * FROM messages ORDER BY id DESC LIMIT 10').all();
-        if (messages.length === 0) return ctx.reply('📭 هیچ پیامی وجود ندارد.');
-        for (const msg of messages) {
-            const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(msg.sender_id);
-            const userName = user ? `کاربر #${user.user_code}` : 'ناشناس';
-            const date = new Date(msg.created_at).toLocaleDateString('fa-IR');
-            await ctx.reply(`📩 <b>پیام از:</b> ${userName}\n📅 <b>تاریخ:</b> ${date}\n\n💬 <b>متن:</b>\n${msg.text}\n\nوضعیت: ${msg.status === 'replied' ? '✅ پاسخ داده شده' : '⏳ در انتظار پاسخ'}`, { parse_mode: 'HTML' });
-        }
-    });
-
-    // ================== مدیریت ورودی‌های ادمین ==================
-    
-    // هندلر پیام‌های متنی که ادمین در حالت انتظار می‌فرسته
+    // ================== هندلر اصلی دریافت ورودی‌های ادمین (State) ==================
     bot.on('message:text', async (ctx, next) => {
-        if (ctx.from.id !== OWNER_ID) return next();
+        // اگه کاربر ادمین نیست یا حالت ادمین نداره، برو بعدی
+        if (ctx.from.id !== OWNER_ID || !ctx.session.adminState) return next();
         
         const state = ctx.session.adminState;
-        const text = ctx.message.text;
+        const text = ctx.message.text.trim();
 
-        // اگه ادمین دکمه‌های منو رو زده باشه، از اینجا رد شو
-        if (['👥 کاربران', '💰 مدیریت سکه کاربران', '🎁 مدیریت کد هدیه', '📊 آمار ربات', '👤 ادمین‌ها', '⚙️ تنظیمات', '🔕 خاموش/روشن', '📩 پیام‌های دریافتی', '👑 پنل مدیریت', '🔙 بازگشت', '➕ افزودن ادمین', '📋 لیست ادمین‌ها'].includes(text)) {
+        // اگه کاربر دستور زد، لغو کن
+        if (text.startsWith('/')) {
+            ctx.session.adminState = null;
             return next();
         }
 
-        if (!state) return next();
-
-        // 1. دریافت آیدی کاربر برای مدیریت سکه
+        // 1. گرفتن آیدی برای مدیریت سکه
         if (state === 'waiting_for_coin_user') {
             try {
-                const targetId = parseInt(text.trim());
+                const targetId = parseInt(text);
                 const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(targetId);
                 
                 if (!user) {
-                    await ctx.reply('❌ کاربری با این آیدی یافت نشد. لطفاً دوباره تلاش کنید.');
-                    return;
+                    return await ctx.reply('❌ کاربری با این آیدی یافت نشد. دوباره تلاش کنید:');
                 }
 
                 ctx.session.targetUserId = targetId;
@@ -141,17 +158,16 @@ module.exports = (bot) => {
                 
                 await ctx.reply(`👤 کاربر پیدا شد: <b>${user.full_name}</b>\n💰 موجودی فعلی: <b>${user.score}</b>\n\nلطفاً مقدار سکه‌ای که می‌خواهید اضافه/کم کنید را وارد کنید (مثلاً 100 یا -100):`, { parse_mode: 'HTML' });
             } catch (e) {
-                await ctx.reply('❌ لطفاً یک آیدی عددی معتبر وارد کنید.');
+                await ctx.reply('❌ لطفاً یک آیدی عددی معتبر وارد کنید:');
             }
             return;
         }
 
-        // 2. دریافت مقدار سکه
+        // 2. گرفتن مقدار سکه
         if (state === 'waiting_for_coin_amount') {
-            const amount = parseInt(text.trim());
+            const amount = parseInt(text);
             if (isNaN(amount)) {
-                await ctx.reply('❌ لطفاً یک عدد معتبر وارد کنید.');
-                return;
+                return await ctx.reply('❌ لطفاً یک عدد معتبر وارد کنید:');
             }
 
             const targetId = ctx.session.targetUserId;
@@ -169,7 +185,7 @@ module.exports = (bot) => {
         // 3. افزودن ادمین
         if (state === 'waiting_for_admin_id') {
             try {
-                const newAdminId = parseInt(text.trim());
+                const newAdminId = parseInt(text);
                 db.prepare('INSERT OR IGNORE INTO admins (telegram_id) VALUES (?)').run(newAdminId);
                 await ctx.reply(`✅ کاربر <code>${newAdminId}</code> با موفقیت ادمین شد!`, { parse_mode: 'HTML', reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } });
             } catch (e) {
@@ -179,17 +195,19 @@ module.exports = (bot) => {
             return;
         }
 
-        return next();
-    });
+        // 4. حذف ادمین
+        if (state === 'waiting_for_remove_admin_id') {
+            try {
+                const removeId = parseInt(text);
+                db.prepare('DELETE FROM admins WHERE telegram_id = ?').run(removeId);
+                await ctx.reply(`✅ کاربر <code>${removeId}</code> از ادمینی حذف شد!`, { parse_mode: 'HTML', reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } });
+            } catch (e) {
+                await ctx.reply('❌ خطا در حذف ادمین.');
+            }
+            ctx.session.adminState = null;
+            return;
+        }
 
-    // زیرمنوها
-    bot.hears('👥 همه کاربران', async (ctx) => {
-        if (ctx.from.id !== OWNER_ID) return;
-        const users = db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT 20').all();
-        let text = '👥 <b>لیست ۲۰ کاربر آخر:</b>\n\n';
-        users.forEach((u, i) => {
-            text += `${i+1}. ${u.full_name} | کد: ${u.user_code} | <code>${u.telegram_id}</code> | ${u.is_banned ? '🚫' : '✅'}\n`;
-        });
-        await ctx.reply(text, { parse_mode: 'HTML' });
+        return next();
     });
 };
