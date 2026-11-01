@@ -9,7 +9,6 @@ const { getUserMenu } = require('./keyboards/user');
 const { getAdminMenu } = require('./keyboards/admin');
 const db = require('./database/db');
 
-// ایمپورت هندلرها
 const userHandlers = require('./handlers/user');
 const adminHandlers = require('./handlers/admin');
 const anonymousHandlers = require('./handlers/anonymous');
@@ -21,32 +20,32 @@ if (!BOT_TOKEN || !OWNER_ID) {
 
 const bot = new Bot(BOT_TOKEN);
 
-// ================== دستور استارت (مخصوص لینک ناشناس) ==================
-// این هندلر باید حتماً قبل از هندلر استارت عادی باشه
+// ================== استارت (لینک ناشناس) ==================
 bot.command('start', async (ctx, next) => {
     const payload = ctx.match;
     if (payload === 'anon') {
-        // ارسال پیام برای کاربری که با لینک اومده (بدون کیبورد)
         await ctx.reply('👋 به ربات پیام ناشناس خوش آمدی!\n\nبرای ارسال پیام، کافیه همین الان هر متنی که میخوای رو بفرستی.', { 
             reply_markup: { remove_keyboard: true } 
         });
         return;
     }
-    return next(); // اگر payload 'anon' نبود، برو سراغ هندلر بعدی
+    return next();
 });
 
-// ================== دستور استارت عادی ==================
+// ================== استارت عادی ==================
 bot.command('start', async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username || '';
   const fullName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
 
-  // ثبت کاربر در دیتابیس (اگه جدید باشه)
   const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
   if (!user) {
     const now = new Date().toISOString();
-    db.prepare('INSERT INTO users (telegram_id, username, full_name, join_date) VALUES (?, ?, ?, ?)')
-      .run(userId, username, fullName, now);
+    // ✅ تولید کد اختصاصی ۵ رقمی برای کاربر جدید
+    const newUserCode = Math.floor(Math.random() * 90000) + 10000;
+    
+    db.prepare('INSERT INTO users (telegram_id, user_code, username, full_name, join_date) VALUES (?, ?, ?, ?, ?)')
+      .run(userId, newUserCode, username, fullName, now);
   }
 
   const startText = db.prepare('SELECT value FROM settings WHERE key = ?').get('start_text')?.value || 'سلام!';
@@ -69,8 +68,7 @@ bot.hears('🔙 بازگشت', async (ctx) => {
   });
 });
 
-// ================== لود کردن هندلرها ==================
-// نکته مهم: این‌ها باید دقیقاً اینجا باشن (بعد از تعریف bot)
+// ================== لود هندلرها ==================
 userHandlers(bot);
 adminHandlers(bot);
 anonymousHandlers(bot);
