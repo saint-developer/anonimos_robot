@@ -1,5 +1,7 @@
 require('dotenv').config();
 
+const userHandlers = require('./handlers/user');
+const adminHandlers = require('./handlers/admin');
 const { Bot } = require('grammy');
 const express = require('express');
 const app = express();
@@ -87,5 +89,10 @@ const startBot = async () => {
     process.exit(1);
   }
 };
+
+// لود کردن هندلرها
+userHandlers(bot);
+adminHandlers(bot);
+
 
 startBot();
