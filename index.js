@@ -1,7 +1,5 @@
 require('dotenv').config();
 
-const userHandlers = require('./handlers/user');
-const adminHandlers = require('./handlers/admin');
 const { Bot } = require('grammy');
 const express = require('express');
 const app = express();
@@ -10,6 +8,11 @@ const { BOT_TOKEN, OWNER_ID, OWNER_NAME } = require('./config');
 const { getUserMenu } = require('./keyboards/user');
 const { getAdminMenu } = require('./keyboards/admin');
 const db = require('./database/db');
+
+// ایمپورت هندلرها
+const userHandlers = require('./handlers/user');
+const adminHandlers = require('./handlers/admin');
+const anonymousHandlers = require('./handlers/anonymous');
 
 if (!BOT_TOKEN || !OWNER_ID) {
   console.error('❌ BOT_TOKEN and OWNER_UUID are required in .env file');
@@ -22,7 +25,7 @@ const bot = new Bot(BOT_TOKEN);
 bot.command('start', async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username || '';
-  const fullName = ctx.from.full_name || 'کاربر';
+  const fullName = ctx.from.first_name + (ctx.from.last_name ? ' ' + ctx.from.last_name : '');
 
   // ثبت کاربر در دیتابیس (اگه جدید باشه)
   const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
@@ -42,18 +45,6 @@ bot.command('start', async (ctx) => {
   });
 });
 
-// ================== دکمه پنل مدیریت ==================
-bot.hears('👑 پنل مدیریت', async (ctx) => {
-  if (ctx.from.id !== OWNER_ID) return; // فقط ادمین اصلی
-  
-  await ctx.reply('👑 پنل مدیریت:', {
-    reply_markup: {
-      keyboard: getAdminMenu(),
-      resize_keyboard: true
-    }
-  });
-});
-
 // ================== دکمه بازگشت ==================
 bot.hears('🔙 بازگشت', async (ctx) => {
   await ctx.reply('🏠 بازگشت به منوی اصلی', {
@@ -63,6 +54,12 @@ bot.hears('🔙 بازگشت', async (ctx) => {
     }
   });
 });
+
+// ================== لود کردن هندلرها ==================
+// نکته: این‌ها باید دقیقاً اینجا باشن (بعد از تعریف bot)
+userHandlers(bot);
+adminHandlers(bot);
+anonymousHandlers(bot); // 👈 این خط رو از بالا آوردیم پایین
 
 // ================== وب‌سرور Render ==================
 const PORT = process.env.PORT || 3000;
@@ -89,10 +86,5 @@ const startBot = async () => {
     process.exit(1);
   }
 };
-
-// لود کردن هندلرها
-userHandlers(bot);
-adminHandlers(bot);
-
 
 startBot();
