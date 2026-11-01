@@ -1,8 +1,10 @@
 function getAdminMenu() {
     return [
-        ['👥 کاربران', '📢 پیام همگانی'],
+        ['👥 کاربران', '💰 مدیریت سکه کاربران'],
+        ['📢 پیام همگانی', '🎁 مدیریت کد هدیه'],
         ['📩 پیام‌های دریافتی', '📊 آمار ربات'],
-        ['⚙️ تنظیمات', '🔕 خاموش/روشن'],
+        ['👤 ادمین‌ها', '⚙️ تنظیمات'],
+        ['🔕 خاموش/روشن'],
         ['🔙 بازگشت']
     ];
 }
@@ -10,7 +12,7 @@ function getAdminMenu() {
 function getUsersSubmenu() {
     return [
         ['👥 همه کاربران', '🚫 کاربران مسدود'],
-        ['🔎 سرچ کاربران'],
+        ['🔎 سرچ کاربران', '⚠️ اخطاردهی'],
         ['🔙 بازگشت']
     ];
 }
@@ -18,6 +20,15 @@ function getUsersSubmenu() {
 function getSettingsMenu() {
     return [
         ['📝 تنظیم متن استارت', '🔗 تنظیم کانال جوین اجباری'],
+        ['🛍️ مدیریت فروشگاه', '💎 جستجوگر'],
+        ['🔙 بازگشت']
+    ];
+}
+
+function getAdminsMenu() {
+    return [
+        ['➕ افزودن ادمین', '🗑️ حذف ادمین'],
+        ['📋 لیست ادمین‌ها'],
         ['🔙 بازگشت']
     ];
 }
@@ -25,5 +36,6 @@ function getSettingsMenu() {
 module.exports = {
     getAdminMenu,
     getUsersSubmenu,
-    getSettingsMenu
+    getSettingsMenu,
+    getAdminsMenu
 };
