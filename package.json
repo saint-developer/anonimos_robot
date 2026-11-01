@@ -1,0 +1,11 @@
+{
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "dotenv": "latest",
+    "express": "^5.3.0",
+    "grammy": "latest"
+  }
+}
