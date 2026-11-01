@@ -4,96 +4,65 @@ const { Bot } = require('grammy');
 const express = require('express');
 const app = express();
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const OWNER_UUID = process.env.OWNER_UUID;
-const OWNER_NAME = process.env.OWNER_NAME || 'Message Owner';
+const { BOT_TOKEN, OWNER_ID, OWNER_NAME } = require('./config');
+const { getUserMenu } = require('./keyboards/user');
+const { getAdminMenu } = require('./keyboards/admin');
+const db = require('./database/db');
 
-if (!BOT_TOKEN || !OWNER_UUID) {
+if (!BOT_TOKEN || !OWNER_ID) {
   console.error('❌ BOT_TOKEN and OWNER_UUID are required in .env file');
   process.exit(1);
 }
 
 const bot = new Bot(BOT_TOKEN);
-const messageMap = new Map();
 
+// ================== دستور استارت ==================
 bot.command('start', async (ctx) => {
-  const welcomeMessage = `
-Hi there! You're sending a message to ${OWNER_NAME}, and this way they won't know who you are 🥰
+  const userId = ctx.from.id;
+  const username = ctx.from.username || '';
+  const fullName = ctx.from.full_name || 'کاربر';
 
-Write your message below:
-  `;
+  // ثبت کاربر در دیتابیس (اگه جدید باشه)
+  const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
+  if (!user) {
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO users (telegram_id, username, full_name, join_date) VALUES (?, ?, ?, ?)')
+      .run(userId, username, fullName, now);
+  }
 
-  await ctx.reply(welcomeMessage, {
-    parse_mode: 'HTML'
+  const startText = db.prepare('SELECT value FROM settings WHERE key = ?').get('start_text')?.value || 'سلام!';
+  
+  await ctx.reply(startText, {
+    reply_markup: {
+      keyboard: getUserMenu(userId),
+      resize_keyboard: true
+    }
   });
 });
 
-bot.on('message:text', async (ctx) => {
-  const text = ctx.message.text;
-
-  if (String(ctx.chat.id) === String(OWNER_UUID)) {
-    const repliedTo = ctx.message.reply_to_message;
-    if (!repliedTo) return;
-
-    const original = messageMap.get(repliedTo.message_id);
-    if (!original) return;
-
-    try {
-      await ctx.api.sendMessage(
-        original.chatId,
-        `${OWNER_NAME} replied to you:\n${text}`,
-        { reply_to_message_id: original.messageId }
-      );
-      await ctx.reply('✅️ Your reply was sent successfully', {
-        reply_to_message_id: ctx.message.message_id
-      });
-    } catch (error) {
-      console.error('Error sending owner reply to sender:', error);
+// ================== دکمه پنل مدیریت ==================
+bot.hears('👑 پنل مدیریت', async (ctx) => {
+  if (ctx.from.id !== OWNER_ID) return; // فقط ادمین اصلی
+  
+  await ctx.reply('👑 پنل مدیریت:', {
+    reply_markup: {
+      keyboard: getAdminMenu(),
+      resize_keyboard: true
     }
-    return;
-  }
-
-  if (text.startsWith('/')) return;
-
-  try {
-    const sentToOwner = await ctx.api.sendMessage(OWNER_UUID, `📩 New message from an anonymous sender:\n\n${text}`, {
-      parse_mode: 'HTML'
-    });
-
-    messageMap.set(sentToOwner.message_id, {
-      chatId: ctx.chat.id,
-      messageId: ctx.message.message_id
-    });
-
-    await ctx.reply(`Your message was sent successfully ✅️`, {
-      parse_mode: 'HTML'
-    });
-
-  } catch (error) {
-    console.error('Error sending message:', error);
-  }
+  });
 });
 
-bot.on('message_reaction', async (ctx) => {
-  const reaction = ctx.messageReaction;
-  if (!reaction) return;
-  if (String(reaction.chat.id) !== String(OWNER_UUID)) return;
-
-  const original = messageMap.get(reaction.message_id);
-  if (!original) return;
-
-  try {
-    await ctx.api.setMessageReaction(
-      original.chatId,
-      original.messageId,
-      reaction.new_reaction
-    );
-  } catch (error) {
-    console.error('Error mirroring reaction to sender:', error);
-  }
+// ================== دکمه بازگشت ==================
+bot.hears('🔙 بازگشت', async (ctx) => {
+  await ctx.reply('🏠 بازگشت به منوی اصلی', {
+    reply_markup: {
+      keyboard: getUserMenu(ctx.from.id),
+      resize_keyboard: true
+    }
+  });
 });
 
-// --- وب سرور برای زنده نگه داشتن Render ---
+// ================== وب‌سرور Render ==================
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.send('🤖 Anonymous Link Bot is up and running!');
@@ -102,19 +71,16 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🌐 Web server is listening on port ${PORT}`);
 });
-// ------------------------------------------
 
+// ================== استارت ربات ==================
 const startBot = async () => {
   try {
     console.log('🚀 Starting bot...');
     await bot.init();
     console.log(`✅ Bot @${bot.botInfo.username} is running!`);
-    console.log(`👤 Owner ID: ${OWNER_UUID}`);
-    console.log(`📝 Owner Name: ${OWNER_NAME}`);
-    console.log('📨 Waiting for messages...');
     
     bot.start({
-      allowed_updates: ['message', 'message_reaction']
+      allowed_updates: ['message', 'callback_query']
     });
   } catch (error) {
     console.error('❌ Failed to start bot:', error);
@@ -123,13 +89,3 @@ const startBot = async () => {
 };
 
 startBot();
-
-process.on('SIGINT', () => {
-  console.log('🛑 Bot stopped');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
-  console.log('🛑 Bot stopped');
-  process.exit(0);
-});
