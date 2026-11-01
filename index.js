@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { Bot } = require('grammy');
+const { Bot, session } = require('grammy'); // 👈 session اضافه شد
 const express = require('express');
 const app = express();
 
@@ -19,6 +19,11 @@ if (!BOT_TOKEN || !OWNER_ID) {
 }
 
 const bot = new Bot(BOT_TOKEN);
+
+// 👈 فعال‌سازی سیستم Session برای مدیریت State
+bot.use(session({
+    initial: () => ({ adminState: null, targetUserId: null })
+}));
 
 // ================== استارت (لینک ناشناس) ==================
 bot.command('start', async (ctx, next) => {
@@ -41,9 +46,7 @@ bot.command('start', async (ctx) => {
   const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
   if (!user) {
     const now = new Date().toISOString();
-    // ✅ تولید کد اختصاصی ۵ رقمی برای کاربر جدید
     const newUserCode = Math.floor(Math.random() * 90000) + 10000;
-    
     db.prepare('INSERT INTO users (telegram_id, user_code, username, full_name, join_date) VALUES (?, ?, ?, ?, ?)')
       .run(userId, newUserCode, username, fullName, now);
   }
@@ -60,6 +63,7 @@ bot.command('start', async (ctx) => {
 
 // ================== دکمه بازگشت ==================
 bot.hears('🔙 بازگشت', async (ctx) => {
+  ctx.session.adminState = null; // ریست کردن State ادمین
   await ctx.reply('🏠 بازگشت به منوی اصلی', {
     reply_markup: {
       keyboard: getUserMenu(ctx.from.id),
