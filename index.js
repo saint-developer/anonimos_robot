@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { Bot, session } = require('grammy'); // 👈 session اضافه شد
+const { Bot, session } = require('grammy');
 const express = require('express');
 const app = express();
 
@@ -9,9 +9,11 @@ const { getUserMenu } = require('./keyboards/user');
 const { getAdminMenu } = require('./keyboards/admin');
 const db = require('./database/db');
 
+// ایمپورت هندلرها
 const userHandlers = require('./handlers/user');
 const adminHandlers = require('./handlers/admin');
 const anonymousHandlers = require('./handlers/anonymous');
+const inlineHandlers = require('./handlers/inline'); // 👈 اینجا ایمپورت میشه
 
 if (!BOT_TOKEN || !OWNER_ID) {
   console.error('❌ BOT_TOKEN and OWNER_UUID are required in .env file');
@@ -20,7 +22,7 @@ if (!BOT_TOKEN || !OWNER_ID) {
 
 const bot = new Bot(BOT_TOKEN);
 
-// 👈 فعال‌سازی سیستم Session برای مدیریت State
+// 👈 فعال‌سازی سیستم Session
 bot.use(session({
     initial: () => ({ adminState: null, targetUserId: null })
 }));
@@ -63,7 +65,7 @@ bot.command('start', async (ctx) => {
 
 // ================== دکمه بازگشت ==================
 bot.hears('🔙 بازگشت', async (ctx) => {
-  ctx.session.adminState = null; // ریست کردن State ادمین
+  ctx.session.adminState = null;
   await ctx.reply('🏠 بازگشت به منوی اصلی', {
     reply_markup: {
       keyboard: getUserMenu(ctx.from.id),
@@ -73,9 +75,11 @@ bot.hears('🔙 بازگشت', async (ctx) => {
 });
 
 // ================== لود هندلرها ==================
+// نکته مهم: این‌ها باید دقیقاً بعد از تعریف bot باشن
 userHandlers(bot);
 adminHandlers(bot);
 anonymousHandlers(bot);
+inlineHandlers(bot); // 👈 اینجا صدا زده میشه
 
 // ================== وب‌سرور Render ==================
 const PORT = process.env.PORT || 3000;
@@ -94,9 +98,11 @@ const startBot = async () => {
     await bot.init();
     console.log(`✅ Bot @${bot.botInfo.username} is running!`);
     
+    // 👈 اینجا درست بسته شده
     bot.start({
-      allowed_updates: ['message', 'callback_query']
+      allowed_updates: ['message', 'callback_query', 'inline_query']
     });
+
   } catch (error) {
     console.error('❌ Failed to start bot:', error);
     process.exit(1);

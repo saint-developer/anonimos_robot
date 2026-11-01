@@ -4,50 +4,38 @@ const { OWNER_ID, OWNER_NAME } = require('../config');
 
 module.exports = (bot) => {
     
-    // هندلر دریافت پیام متنی از کاربران عادی
-    bot.on('message:text', async (ctx, next) => {
-        const userId = ctx.from.id;
-        const text = ctx.message.text;
+    // هندلر دریافت عکس، ویدیو، ویس
+bot.on(['message:photo', 'message:video', 'message:voice'], async (ctx, next) => {
+    const userId = ctx.from.id;
+    if (userId === OWNER_ID) return next();
 
-        // اگه پیام از طرف ادمین بود یا با دکمه‌های منو شروع میشد، برو هندلرهای بعدی
-        if (userId === OWNER_ID) return next();
-        if (text.startsWith('/')) return;
-        
-        const menuButtons = ['👤 پروفایل من', '📜 راهنمای ربات', '📩 ارتباط با ادمین', '💠 حمایت مالی', '🏆 برترین‌های ربات', '👑 پنل مدیریت', '🔙 بازگشت', '👥 کاربران', '📢 پیام همگانی', '📩 پیام‌های دریافتی', '📊 آمار ربات', '⚙️ تنظیمات', '🔕 خاموش/روشن'];
-        if (menuButtons.includes(text)) return next();
+    const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
+    if (!user || user.is_banned) return;
 
-        // چک کردن مسدود بودن کاربر
-        const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(userId);
-        if (user && user.is_banned) {
-            return ctx.reply('🚫 شما توسط ادمین مسدود شده‌اید و نمی‌توانید پیام بفرستید!');
+    try {
+        let caption = `📩 <b>پیام ناشناس جدید (رسانه):</b>\n\n`;
+        if (ctx.message.caption) {
+            caption += `💬 متن: ${ctx.message.caption}\n\n`;
         }
 
-        // چک کردن روشن بودن ربات
-        const botEnabled = db.prepare('SELECT value FROM settings WHERE key = ?').get('bot_enabled')?.value;
-        if (botEnabled === '0') {
-            const statusText = db.prepare('SELECT value FROM settings WHERE key = ?').get('bot_status_text')?.value || 'ربات خاموش است.';
-            return ctx.reply(`🔕 <b>${statusText}</b>`, { parse_mode: 'HTML' });
+        if (ctx.message.photo) {
+            const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+            await ctx.api.sendPhoto(OWNER_ID, photo, { caption, parse_mode: 'HTML' });
+        } else if (ctx.message.video) {
+            await ctx.api.sendVideo(OWNER_ID, ctx.message.video.file_id, { caption, parse_mode: 'HTML' });
+        } else if (ctx.message.voice) {
+            await ctx.api.sendVoice(OWNER_ID, ctx.message.voice.file_id, { caption, parse_mode: 'HTML' });
         }
 
-        try {
-            // ارسال پیام به ادمین
-            const sentToOwner = await ctx.api.sendMessage(
-                OWNER_ID, 
-                `📩 <b>پیام ناشناس جدید:</b>\n\n${text}`, 
-                { parse_mode: 'HTML' }
-            );
+        // ذخیره در دیتابیس
+        const now = new Date().toISOString();
+        db.prepare('INSERT INTO messages (sender_id, text, created_at, status) VALUES (?, ?, ?, ?)').run(userId, '[رسانه]', now, 'sent');
 
-            // ذخیره در دیتابیس برای ریپلای
-            const now = new Date().toISOString();
-            db.prepare('INSERT INTO messages (sender_id, owner_msg_id, text, created_at) VALUES (?, ?, ?, ?)')
-              .run(userId, sentToOwner.message_id, text, now);
-
-            await ctx.reply('✅ پیام شما با موفقیت به صورت ناشناس برای مدیر ارسال شد.');
-        } catch (error) {
-            console.error('Error sending anonymous message:', error);
-            await ctx.reply('❌ خطایی در ارسال پیام پیش آمد. لطفاً بعداً تلاش کنید.');
-        }
-    });
+        await ctx.reply('✅ رسانه شما ناشناس ارسال شد.');
+    } catch (e) {
+        await ctx.reply('❌ خطا در ارسال رسانه.');
+    }
+});
 
     // هندلر دریافت ریپلای از طرف ادمین
     bot.on('message:text', async (ctx, next) => {
