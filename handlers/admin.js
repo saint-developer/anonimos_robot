@@ -129,6 +129,25 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
+    // ================== مدیریت فروشگاه (جدید) ==================
+    bot.hears('🛍️ مدیریت فروشگاه', async (ctx) => {
+        if (ctx.from.id !== OWNER_ID) return;
+        const items = db.prepare('SELECT * FROM shop_items').all();
+        
+        let text = '🛍️ <b>مدیریت فروشگاه</b>\n\n';
+        if (items.length === 0) {
+            text += '📭 فروشگاه خالی است.\n';
+        } else {
+            items.forEach(i => {
+                text += `• ${i.emoji || '🛍️'} <b>${i.name}</b> | ${i.price} سکه\n`;
+            });
+        }
+        text += '\n➕ برای افزودن محصول جدید، نام محصول را ارسال کنید:';
+        
+        ctx.session.adminState = 'waiting_for_product_name';
+        await ctx.reply(text, { parse_mode: 'HTML' });
+    });
+
     // ================== هندلر اصلی دریافت ورودی‌های ادمین (State) ==================
     bot.on('message:text', async (ctx, next) => {
         // اگه کاربر ادمین نیست یا حالت ادمین نداره، برو بعدی
@@ -205,6 +224,31 @@ module.exports = (bot) => {
                 await ctx.reply('❌ خطا در حذف ادمین.');
             }
             ctx.session.adminState = null;
+            return;
+        }
+
+        // 5. افزودن محصول جدید (فروشگاه)
+        if (state === 'waiting_for_product_name') {
+            ctx.session.newProductName = text;
+            ctx.session.adminState = 'waiting_for_product_price';
+            await ctx.reply(`📝 نام محصول: <b>${text}</b>\n\n💰 حالا قیمت محصول را به سکه وارد کنید (مثلاً 100):`, { parse_mode: 'HTML' });
+            return;
+        }
+
+        // 6. گرفتن قیمت محصول
+        if (state === 'waiting_for_product_price') {
+            const price = parseInt(text);
+            if (isNaN(price)) return await ctx.reply('❌ لطفاً یک عدد معتبر وارد کنید:');
+            
+            db.prepare('INSERT INTO shop_items (name, price, emoji) VALUES (?, ?, ?)').run(ctx.session.newProductName, price, '🛍️');
+            
+            await ctx.reply(`✅ محصول <b>${ctx.session.newProductName}</b> با قیمت <b>${price}</b> سکه به فروشگاه اضافه شد!`, { 
+                parse_mode: 'HTML', 
+                reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } 
+            });
+            
+            ctx.session.adminState = null;
+            ctx.session.newProductName = null;
             return;
         }
 
