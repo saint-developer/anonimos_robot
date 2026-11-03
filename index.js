@@ -76,10 +76,10 @@ bot.hears('🔙 بازگشت', async (ctx) => {
 
 // ================== لود هندلرها ==================
 // نکته مهم: این‌ها باید دقیقاً بعد از تعریف bot باشن
-userHandlers(bot);
 adminHandlers(bot);
+userHandlers(bot);
+inlineHandlers(bot);
 anonymousHandlers(bot);
-inlineHandlers(bot); // 👈 اینجا صدا زده میشه
 
 // ================== وب‌سرور Render ==================
 const PORT = process.env.PORT || 3000;

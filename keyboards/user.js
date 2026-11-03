@@ -2,18 +2,29 @@ const { InlineKeyboard } = require('grammy');
 const { OWNER_ID } = require('../config');
 const db = require('../database/db');
 
-function getUserMenu(telegramId) {
+function getUserMenu(userId = null) {
     const keyboard = [
         ['👤 پروفایل من', '💰 سکه‌های من'],
-        ['🛍️ فروشگاه ربات', '🏦 بانک انتقال'],
-        ['🔗 لینک ناشناس من', '🏆 برترین‌های ربات'],
-        ['👥 دعوت دوستان', '📜 راهنمای ربات'],
+        ['🎮 بازی با دوستان', '🎲 بازی با ناشناس'], // فعلاً برای هماهنگی می‌ذاریم
+        ['🪙 سکه روزانه رایگان', '🏦 بانک انتقال'],
+        ['🛍️ فروشگاه', '🎁 کد هدیه'],
+        ['🚀 ارتقا پنل', '👥 دعوت دوستان'],
+        ['🏆 برترین‌های ربات', '🥇 رتبه من'],
+        ['📜 راهنمای بازی', '❓ سوالات متداول'],
         ['📩 ارتباط با ادمین', '💠 حمایت مالی']
     ];
 
-    // بررسی ادمین بودن برای نمایش دکمه پنل
-    const isAdmin = telegramId === OWNER_ID || db.prepare('SELECT * FROM admins WHERE telegram_id = ?').get(telegramId);
-    
+    // چک کردن ادمین بودن
+    let isAdmin = false;
+    if (userId) {
+        if (userId === OWNER_ID) {
+            isAdmin = true;
+        } else {
+            const dbAdmin = db.prepare('SELECT * FROM admins WHERE telegram_id = ?').get(userId);
+            if (dbAdmin) isAdmin = true;
+        }
+    }
+
     if (isAdmin) {
         keyboard.push(['👑 پنل مدیریت']);
     }
