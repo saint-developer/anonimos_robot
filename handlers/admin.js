@@ -9,7 +9,7 @@ const {
 } = require('../keyboards/admin');
 
 module.exports = (bot) => {
-    // منوهای اصلی
+    // ================== منوهای اصلی ==================
     bot.hears('👑 پنل مدیریت', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         ctx.session.adminState = null;
@@ -39,11 +39,18 @@ module.exports = (bot) => {
         await ctx.reply('⚙️ <b>تنظیمات ربات</b>', { parse_mode: 'HTML', reply_markup: { keyboard: getSettingsMenu(), resize_keyboard: true } });
     });
 
-    // دکمه‌های عملیاتی
+    // ================== دکمه‌های عملیاتی ==================
     bot.hears('💰 مدیریت سکه کاربران', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         ctx.session.adminState = 'waiting_for_coin_user';
         await ctx.reply('💰 <b>مدیریت سکه</b>\n\nلطفاً آیدی عددی کاربر را وارد کنید (یا برای انصراف /start بزنید):', { parse_mode: 'HTML' });
+    });
+
+    // 📤 ارسال پیام همگانی
+    bot.hears('📤 ارسال پیام', async (ctx) => {
+        if (ctx.from.id !== OWNER_ID) return;
+        ctx.session.adminState = 'waiting_for_broadcast_msg';
+        await ctx.reply('📤 <b>ارسال پیام همگانی</b>\n\nلطفاً متنی که می‌خواهید برای همه کاربران ارسال شود را وارد کنید:', { parse_mode: 'HTML' });
     });
 
     bot.hears('📊 آمار ربات', async (ctx) => {
@@ -75,7 +82,7 @@ module.exports = (bot) => {
         });
     });
 
-    // مدیریت ادمین‌ها
+    // ================== مدیریت ادمین‌ها ==================
     bot.hears('➕ افزودن ادمین', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         ctx.session.adminState = 'waiting_for_admin_id';
@@ -93,7 +100,7 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
-    // زیرمنوها
+    // ================== زیرمنوها ==================
     bot.hears('👥 همه کاربران', async (ctx) => {
         if (ctx.from.id !== OWNER_ID) return;
         const users = db.prepare('SELECT * FROM users ORDER BY id DESC LIMIT 20').all();
@@ -104,7 +111,7 @@ module.exports = (bot) => {
         await ctx.reply(text, { parse_mode: 'HTML' });
     });
 
-    // هندلر State ادمین
+    // ================== هندلر State ادمین ==================
     bot.on('message:text', async (ctx, next) => {
         if (ctx.from.id !== OWNER_ID || !ctx.session.adminState) return next();
         
@@ -116,6 +123,7 @@ module.exports = (bot) => {
             return next();
         }
 
+        // 1. مدیریت سکه - دریافت آیدی
         if (state === 'waiting_for_coin_user') {
             try {
                 const targetId = parseInt(text);
@@ -131,6 +139,7 @@ module.exports = (bot) => {
             return;
         }
 
+        // 2. مدیریت سکه - دریافت مقدار و ارسال نوتیفیکیشن
         if (state === 'waiting_for_coin_amount') {
             const amount = parseInt(text);
             if (isNaN(amount)) return await ctx.reply('❌ لطفاً یک عدد معتبر وارد کنید:');
@@ -140,23 +149,64 @@ module.exports = (bot) => {
             const updatedUser = db.prepare('SELECT score FROM users WHERE telegram_id = ?').get(targetId);
             
             await ctx.reply(`✅ عملیات با موفقیت انجام شد!\n💰 موجودی جدید کاربر: <b>${updatedUser.score}</b> سکه`, { parse_mode: 'HTML', reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } });
+
+            // 👈 ارسال نوتیفیکیشن به کاربر
+            try {
+                if (amount > 0) {
+                    await ctx.api.sendMessage(targetId, `🎉 <b>خبر خوب!</b>\n\n🎁 ادمین به شما <b>${amount}</b> سکه هدیه داد!\n💰 موجودی جدید شما: <b>${updatedUser.score}</b> سکه`, { parse_mode: 'HTML' });
+                } else if (amount < 0) {
+                    await ctx.api.sendMessage(targetId, `⚠️ <b>اطلاعیه</b>\n\n📉 ادمین مبلغ <b>${Math.abs(amount)}</b> سکه از حساب شما کسر کرد.\n💰 موجودی جدید شما: <b>${updatedUser.score}</b> سکه`, { parse_mode: 'HTML' });
+                }
+            } catch (e) {
+                console.log(`⚠️ Could not send notification to ${targetId}`);
+            }
             
             ctx.session.adminState = null;
             ctx.session.targetUserId = null;
             return;
         }
 
+        // 3. افزودن ادمین
         if (state === 'waiting_for_admin_id') {
             try {
                 const newAdminId = parseInt(text);
                 db.prepare('INSERT OR IGNORE INTO admins (telegram_id) VALUES (?)').run(newAdminId);
                 await ctx.reply(`✅ کاربر <code>${newAdminId}</code> با موفقیت ادمین شد!`, { parse_mode: 'HTML', reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } });
+
+                // 👈 ارسال نوتیفیکیشن به ادمین جدید
+                try {
+                    await ctx.api.sendMessage(newAdminId, `🎉 <b>تبریک!</b>\n\nشما به عنوان ادمین ربات انتخاب شدید. از این به بعد می‌توانید از پنل مدیریت استفاده کنید.`, { parse_mode: 'HTML' });
+                } catch (e) {
+                    console.log(`⚠️ Could not send notification to new admin ${newAdminId}`);
+                }
             } catch (e) {
                 await ctx.reply('❌ خطا در افزودن ادمین.');
             }
             ctx.session.adminState = null;
             return;
         }
+
+        // 4. ارسال پیام همگانی
+        if (state === 'waiting_for_broadcast_msg') {
+            const users = db.prepare('SELECT telegram_id FROM users').all();
+            let success = 0;
+            let failed = 0;
+
+            for (const user of users) {
+                try {
+                    await ctx.api.sendMessage(user.telegram_id, text, { parse_mode: 'HTML' });
+                    success++;
+                    await new Promise(resolve => setTimeout(resolve, 50)); // جلوگیری از بلاک شدن
+                } catch (e) {
+                    failed++;
+                }
+            }
+
+            await ctx.reply(`✅ <b>ارسال همگانی انجام شد!</b>\n\nموفق: ${success}\nناموفق: ${failed}`, { parse_mode: 'HTML', reply_markup: { keyboard: getAdminMenu(), resize_keyboard: true } });
+            ctx.session.adminState = null;
+            return;
+        }
+
         return next();
     });
 };
